@@ -6,15 +6,15 @@
  * @copyright 2014 Michael Cohen
  */
 
-var request   = require('request'),
-    uuid      = require('uuid'),
-    debug     = require('request-debug'),
-    util      = require('util'),
-    formatISO = require('date-fns/fp/formatISO'),
-    _         = require('underscore'),
-    Promise   = require('bluebird'),
-    version   = require('./package.json').version,
-    xmlParser = new (require('fast-xml-parser').XMLParser)();
+var axios      = require('axios'),
+    axiosDebug = require('axios-debug-log'),
+    uuid       = require('uuid'),
+    util       = require('util'),
+    formatISO  = require('date-fns/fp/formatISO'),
+    _          = require('underscore'),
+    Promise    = require('bluebird'),
+    version    = require('./package.json').version,
+    xmlParser  = new (require('fast-xml-parser').XMLParser)();
 
 module.exports = QuickBooks
 
@@ -117,6 +117,9 @@ function QuickBooks(consumerKey, consumerSecret, token, tokenSecret, realmId, us
   if (!eval(prefix + 'tokenSecret') && this.oauthversion !== '2.0') {
     throw new Error('tokenSecret not defined');
   }
+  if ('production' !== process.env.NODE_ENV && debug) {
+    axiosDebug.attachAxios(axios);
+  }
 }
 
 /**
@@ -127,31 +130,63 @@ function QuickBooks(consumerKey, consumerSecret, token, tokenSecret, realmId, us
  */
 
 QuickBooks.prototype.refreshAccessToken = function(callback) {
-    var auth = (Buffer.from(this.consumerKey + ':' + this.consumerSecret).toString('base64'));
+    var auth = Buffer.from(this.consumerKey + ':' + this.consumerSecret).toString('base64');
 
-    var postBody = {
-        url: QuickBooks.TOKEN_URL,
+    var postBody = new URLSearchParams({
+        grant_type: 'refresh_token',
+        refresh_token: this.refreshToken,
+    }).toString();
+
+    axios.post(QuickBooks.TOKEN_URL, postBody, {
         headers: {
             Accept: 'application/json',
             'Content-Type': 'application/x-www-form-urlencoded',
             Authorization: 'Basic ' + auth,
         },
-        form: {
-            grant_type: 'refresh_token',
-            refresh_token: this.refreshToken
-        }
-    };
-
-    request.post(postBody, (function (e, r, data) {
-        if (r && r.body && r.error!=="invalid_grant") {
-            var refreshResponse = JSON.parse(r.body);
+    }).then(function(response) {
+        var refreshResponse = response.data;
+        // Check if the response contains the tokens
+        if (refreshResponse && refreshResponse.refresh_token && refreshResponse.access_token) {
             this.refreshToken = refreshResponse.refresh_token;
             this.token = refreshResponse.access_token;
-            if (callback) callback(e, refreshResponse);
+            if (callback) callback(null, refreshResponse);
+        } else if (refreshResponse.error === "invalid_grant") {
+            // Handle invalid_grant specifically
+            if (callback) callback(new Error("Invalid grant: The refresh token is invalid or expired"), refreshResponse);
         } else {
-            if (callback) callback(e, r, data);
+            // Handle other unexpected formats
+            if (callback) callback(new Error("Unexpected response format"), response.data);
         }
-    }).bind(this));
+    }.bind(this))
+    .catch(function(error) {
+        if (callback) callback(error, null);
+    });
+
+    // var auth = (Buffer.from(this.consumerKey + ':' + this.consumerSecret).toString('base64'));
+
+    // var postBody = {
+    //     url: QuickBooks.TOKEN_URL,
+    //     headers: {
+    //         Accept: 'application/json',
+    //         'Content-Type': 'application/x-www-form-urlencoded',
+    //         Authorization: 'Basic ' + auth,
+    //     },
+    //     form: {
+    //         grant_type: 'refresh_token',
+    //         refresh_token: this.refreshToken
+    //     }
+    // };
+
+    // request.post(postBody, (function (e, r, data) {
+    //     if (r && r.body && r.error!=="invalid_grant") {
+    //         var refreshResponse = JSON.parse(r.body);
+    //         this.refreshToken = refreshResponse.refresh_token;
+    //         this.token = refreshResponse.access_token;
+    //         if (callback) callback(e, refreshResponse);
+    //     } else {
+    //         if (callback) callback(e, r, data);
+    //     }
+    // }).bind(this));
 };
 
 /**
@@ -161,28 +196,54 @@ QuickBooks.prototype.refreshAccessToken = function(callback) {
  * @param {function} callback - Callback function to call with error/response/data results.
  */
 QuickBooks.prototype.revokeAccess = function(useRefresh, callback) {
-    var auth = (Buffer.from(this.consumerKey + ':' + this.consumerSecret).toString('base64'));
+    var auth = Buffer.from(this.consumerKey + ':' + this.consumerSecret).toString('base64');
     var revokeToken = useRefresh ? this.refreshToken : this.token;
-    var postBody = {
-        url: QuickBooks.REVOKE_URL,
+
+    var postBody = new URLSearchParams({
+        token: revokeToken,
+    }).toString();
+
+    axios.post(QuickBooks.REVOKE_URL, postBody, {
         headers: {
             Accept: 'application/json',
             'Content-Type': 'application/x-www-form-urlencoded',
             Authorization: 'Basic ' + auth,
         },
-        form: {
-            token: revokeToken
-        }
-    };
-
-    request.post(postBody, (function(e, r, data) {
-        if (r && r.statusCode === 200) {
+    })
+    .then(function(response) {
+        if (response.status === 200) {
+            // Clear tokens and realm ID on successful revocation
             this.refreshToken = null;
             this.token = null;
             this.realmId = null;
         }
-        if (callback) callback(e, r, data);
-    }).bind(this));
+        if (callback) callback(null, response.data, response);
+    }.bind(this))
+    .catch(function(error) {
+        if (callback) callback(error, null, null);
+    });
+    // var auth = (Buffer.from(this.consumerKey + ':' + this.consumerSecret).toString('base64'));
+    // var revokeToken = useRefresh ? this.refreshToken : this.token;
+    // var postBody = {
+    //     url: QuickBooks.REVOKE_URL,
+    //     headers: {
+    //         Accept: 'application/json',
+    //         'Content-Type': 'application/x-www-form-urlencoded',
+    //         Authorization: 'Basic ' + auth,
+    //     },
+    //     form: {
+    //         token: revokeToken
+    //     }
+    // };
+
+    // request.post(postBody, (function(e, r, data) {
+    //     if (r && r.statusCode === 200) {
+    //         this.refreshToken = null;
+    //         this.token = null;
+    //         this.realmId = null;
+    //     }
+    //     if (callback) callback(e, r, data);
+    // }).bind(this));
 };
 
 /**
@@ -2335,7 +2396,7 @@ QuickBooks.prototype.reportJournalReport = function(options, callback) {
   module.report(this, 'JournalReport', options, callback)
 }
 
-module.request = function(context, verb, options, entity, callback) {
+module.request = function(context, method, options, entity, callback) {
   var url = context.endpoint + context.realmId + options.url
   if (options.url === QuickBooks.RECONNECT_URL || options.url == QuickBooks.DISCONNECT_URL || options.url === QuickBooks.REVOKE_URL || options.url === QuickBooks.USER_INFO_URL) {
     url = options.url
@@ -2344,7 +2405,7 @@ module.request = function(context, verb, options, entity, callback) {
     url:     url,
     qs:      options.qs || {},
     headers: options.headers || {},
-    json:    true
+    // json:    true
   }
 
   if (entity && entity.allowDuplicateDocNum) {
@@ -2358,6 +2419,7 @@ module.request = function(context, verb, options, entity, callback) {
   }
 
   opts.qs.minorversion = opts.qs.minorversion || context.minorversion;
+  opts.headers['Content-type'] = 'application/json';
   opts.headers['User-Agent'] = 'node-quickbooks: version ' + version
   opts.headers['Request-Id'] = uuid.v1()
   opts.qs.format = 'json';
@@ -2376,39 +2438,92 @@ module.request = function(context, verb, options, entity, callback) {
   if (options.formData) {
     opts.formData = options.formData
   }
-  if ('production' !== process.env.NODE_ENV && context.debug) {
-    debug(request)
-  }
-  request[verb].call(context, opts, function (err, res, body) {
+
+  axios({
+    method: method,
+    url: url,
+    params: opts.qs,
+    headers: opts.headers,
+    body: opts.body,
+  })
+  .then(function (response) {
+    const data = response.data;
     if ('production' !== process.env.NODE_ENV && context.debug) {
-      console.log('invoking endpoint: ' + url)
-      console.log(entity || '')
-      console.log(JSON.stringify(body, null, 2));
+      console.log('invoking endpoint: ' + url);
+      console.log(entity || '');
+      console.log(JSON.stringify(data, null, 2));
     }
     if (callback) {
-      if (err ||
-          res.statusCode >= 300 ||
-          (_.isObject(body) && body.Fault && body.Fault.Error && body.Fault.Error.length) ||
-          (_.isString(body) && !_.isEmpty(body) && body.indexOf('<') === 0)) {
-        callback(err || body, body, res)
+      if (
+        response.status >= 300 || // Fixed to check `response.status` instead of `response.statusCode`
+        (_.isObject(data) && data.Fault && data.Fault.Error && data.Fault.Error.length) ||
+        (_.isString(data) && !_.isEmpty(data) && data.indexOf('<') === 0)
+      ) {
+        callback(data, data, response);
       } else {
-        callback(null, body, res)
+        callback(null, data, response);
       }
     }
   })
+  .catch(function (error) {
+    if (callback) {
+      // Use `error.response` to access status and response body in axios errors
+      var status = error.response ? error.response.status : null;
+      var data = error.response ? error.response.data : null;
+      if (
+        error || 
+        status >= 300 || 
+        (_.isObject(data) && data.Fault && data.Fault.Error && data.Fault.Error.length) ||
+        (_.isString(data) && !_.isEmpty(data) && data.indexOf('<') === 0)
+      ) {
+        callback(error || data, data, error.response);
+      } else {
+        callback(null, data, error.response);
+      }
+    }
+  });
+
+  // request[verb].call(context, opts, function (err, res, body) {
+  //   if ('production' !== process.env.NODE_ENV && context.debug) {
+  //     console.log('invoking endpoint: ' + url)
+  //     console.log(entity || '')
+  //     console.log(JSON.stringify(body, null, 2));
+  //   }
+  //   if (callback) {
+  //     if (err ||
+  //         res.statusCode >= 300 ||
+  //         (_.isObject(body) && body.Fault && body.Fault.Error && body.Fault.Error.length) ||
+  //         (_.isString(body) && !_.isEmpty(body) && body.indexOf('<') === 0)) {
+  //       callback(err || body, body, res)
+  //     } else {
+  //       callback(null, body, res)
+  //     }
+  //   }
+  // })
 }
+
+module.requestPromise = Promise.promisify(module.request);
 
 module.xmlRequest = function(context, url, rootTag, callback) {
   module.request(context, 'get', {url:url}, null, (err, body) => {
-    var json =
-        body.constructor === {}.constructor ? body :
-            (body.constructor === "".constructor ?
-                (body.indexOf('<') === 0 ? xmlParser.parse(body)[rootTag] : body) : body);
+    var json = module.parseXmlBody(response.data);
+    // var json =
+    //     body.constructor === {}.constructor ? body :
+    //         (body.constructor === "".constructor ?
+    //             (body.indexOf('<') === 0 ? xmlParser.parse(body)[rootTag] : body) : body);
     callback(json.ErrorCode === 0 ? null : json, json);
   })
 }
 
-
+module.parseXmlBody = function(body, rootTag) {
+  if (typeof body === 'object') {
+    return body; // Already a JSON object
+  }
+  if (typeof body === 'string' && body.startsWith('<')) {
+    return xmlParser.parse(body)[rootTag]; // Parse XML and extract rootTag
+  }
+  return body; // Return as-is for other cases
+}
 
 QuickBooks.prototype.reconnect = function(callback) {
   module.xmlRequest(this, QuickBooks.RECONNECT_URL, 'ReconnectResponse', callback);
@@ -2486,7 +2601,6 @@ module.void = function (context, entityName, idOrEntity, callback) {
 }
 
 // **********************  Query Api **********************
-module.requestPromise = Promise.promisify(module.request)
 
 module.query = function(context, entity, criteria) {
 
