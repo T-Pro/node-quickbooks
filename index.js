@@ -157,36 +157,11 @@ QuickBooks.prototype.refreshAccessToken = function(callback) {
             // Handle other unexpected formats
             if (callback) callback(new Error("Unexpected response format"), response.data);
         }
-    }.bind(this))
+    }
+    .bind(this))
     .catch(function(error) {
         if (callback) callback(error, null);
     });
-
-    // var auth = (Buffer.from(this.consumerKey + ':' + this.consumerSecret).toString('base64'));
-
-    // var postBody = {
-    //     url: QuickBooks.TOKEN_URL,
-    //     headers: {
-    //         Accept: 'application/json',
-    //         'Content-Type': 'application/x-www-form-urlencoded',
-    //         Authorization: 'Basic ' + auth,
-    //     },
-    //     form: {
-    //         grant_type: 'refresh_token',
-    //         refresh_token: this.refreshToken
-    //     }
-    // };
-
-    // request.post(postBody, (function (e, r, data) {
-    //     if (r && r.body && r.error!=="invalid_grant") {
-    //         var refreshResponse = JSON.parse(r.body);
-    //         this.refreshToken = refreshResponse.refresh_token;
-    //         this.token = refreshResponse.access_token;
-    //         if (callback) callback(e, refreshResponse);
-    //     } else {
-    //         if (callback) callback(e, r, data);
-    //     }
-    // }).bind(this));
 };
 
 /**
@@ -218,32 +193,11 @@ QuickBooks.prototype.revokeAccess = function(useRefresh, callback) {
             this.realmId = null;
         }
         if (callback) callback(null, response.data, response);
-    }.bind(this))
+    }
+    .bind(this))
     .catch(function(error) {
         if (callback) callback(error, null, null);
     });
-    // var auth = (Buffer.from(this.consumerKey + ':' + this.consumerSecret).toString('base64'));
-    // var revokeToken = useRefresh ? this.refreshToken : this.token;
-    // var postBody = {
-    //     url: QuickBooks.REVOKE_URL,
-    //     headers: {
-    //         Accept: 'application/json',
-    //         'Content-Type': 'application/x-www-form-urlencoded',
-    //         Authorization: 'Basic ' + auth,
-    //     },
-    //     form: {
-    //         token: revokeToken
-    //     }
-    // };
-
-    // request.post(postBody, (function(e, r, data) {
-    //     if (r && r.statusCode === 200) {
-    //         this.refreshToken = null;
-    //         this.token = null;
-    //         this.realmId = null;
-    //     }
-    //     if (callback) callback(e, r, data);
-    // }).bind(this));
 };
 
 /**
@@ -2447,7 +2401,7 @@ module.request = function(context, method, options, entity, callback) {
     body: opts.body,
   })
   .then(function (response) {
-    const data = response.data;
+    var data = response.data;
     if ('production' !== process.env.NODE_ENV && context.debug) {
       console.log('invoking endpoint: ' + url);
       console.log(entity || '');
@@ -2507,18 +2461,20 @@ module.requestPromise = Promise.promisify(module.request);
 module.xmlRequest = function(context, url, rootTag, callback) {
   module.request(context, 'get', {url:url}, null, (err, body) => {
     var json = module.parseXmlBody(response.data);
-    // var json =
-    //     body.constructor === {}.constructor ? body :
-    //         (body.constructor === "".constructor ?
-    //             (body.indexOf('<') === 0 ? xmlParser.parse(body)[rootTag] : body) : body);
     callback(json.ErrorCode === 0 ? null : json, json);
   })
 }
 
 module.parseXmlBody = function(body, rootTag) {
+  // var json =
+  //     body.constructor === {}.constructor ? body :
+  //         (body.constructor === "".constructor ?
+  //             (body.indexOf('<') === 0 ? xmlParser.parse(body)[rootTag] : body) : body);
+  // Similar to body.constructor === {}.constructor
   if (typeof body === 'object') {
     return body; // Already a JSON object
   }
+  // Similar to body.constructor === "".constructor
   if (typeof body === 'string' && body.startsWith('<')) {
     return xmlParser.parse(body)[rootTag]; // Parse XML and extract rootTag
   }
