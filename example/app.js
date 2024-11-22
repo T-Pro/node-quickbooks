@@ -27,8 +27,8 @@ app.listen(app.get('port'), function() {
 
 // INSERT YOUR CONSUMER_KEY AND CONSUMER_SECRET HERE
 
-var consumerKey    = 'ABGZMSnwLJH2PqH6P0ROD9MVY2UVbeal1p77cYyxuDt9phyGSU',
-    consumerSecret = 'Bcjdsnj2D2tfzkuu4QJARk0oP2zxQDONbYlYHDMm'
+var consumerKey    = '',
+    consumerSecret = ''
 
 app.get('/',function(req,res){
   res.redirect('/start');
@@ -80,21 +80,6 @@ app.get('/requestToken', function(req, res) {
   .catch(function(error) {
     console.log(error);
   });
-
-  // var postBody = {
-  //   url: QuickBooks.REQUEST_TOKEN_URL,
-  //   oauth: {
-  //     callback:        'http://localhost:' + port + '/callback/',
-  //     consumer_key:    consumerKey,
-  //     consumer_secret: consumerSecret
-  //   }
-  // }
-  // request.post(postBody, function (e, r, data) {
-  //   var requestToken = qs.parse(data)
-  //   req.session.oauth_token_secret = requestToken.oauth_token_secret
-  //   console.log(requestToken)
-  //   res.redirect(QuickBooks.APP_CENTER_URL + requestToken.oauth_token)
-  // })
 })
 
 app.get('/callback', function(req, res) {
@@ -132,14 +117,14 @@ app.get('/callback', function(req, res) {
     method: requestData.method,
     headers: {
       ...headers,
-      'Content-Type': 'application/x-www-form-urlencoded',
+      'Content-Type': 'application/x-www-form-urlencoded'
     },
     data: new URLSearchParams(requestData.data).toString()
   })
   .then(function(response) {
     var accessToken = qs.parse(response.data);
-    console.log(accessToken)
-    console.log(postBody.oauth.realmId)
+    console.log(accessToken);
+    console.log(postBody.oauth.realmId);
 
     // save the access token somewhere on behalf of the logged in user
     qbo = new QuickBooks(consumerKey,
@@ -160,27 +145,5 @@ app.get('/callback', function(req, res) {
   .catch(function(error) {
     console.log(error);
   });
-
-  // request.post(postBody, function (e, r, data) {
-  //   var accessToken = qs.parse(data)
-  //   console.log(accessToken)
-  //   console.log(postBody.oauth.realmId)
-
-  //   // save the access token somewhere on behalf of the logged in user
-  //   qbo = new QuickBooks(consumerKey,
-  //                        consumerSecret,
-  //                        accessToken.oauth_token,
-  //                        accessToken.oauth_token_secret,
-  //                        postBody.oauth.realmId,
-  //                        true, // use the Sandbox
-  //                        true); // turn debugging on
-
-  //   // test out account access
-  //   qbo.findAccounts(function(_, accounts) {
-  //     accounts.QueryResponse.Account.forEach(function(account) {
-  //       console.log(account.Name)
-  //     })
-  //   })
-  // })
-  res.send('<!DOCTYPE html><html lang="en"><head></head><body><script>window.opener.location.reload(); window.close();</script></body></html>')
+  res.send('<!DOCTYPE html><html lang="en"><head></head><body><script>window.opener.location.reload(); window.close();</script></body></html>');
 })
