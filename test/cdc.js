@@ -1,6 +1,6 @@
 var expect     = require('expect'),
     async      = require('async'),
-    moment     = require('moment'),
+    luxon      = require('luxon'),
     config     = require('../config'),
     QuickBooks = require('../index'),
     qbo        = new QuickBooks(config);
@@ -20,7 +20,7 @@ describe('Change Data Capture', function() {
         cb()
       })
     }, function(cb) {
-      qbo.changeDataCapture(['Attachable'], moment().subtract(1, 'm'), function(err, data) {
+      qbo.changeDataCapture(['Attachable'], luxon.DateTime.now().minus({ minutes: 1 }), function(err, data) {
         expect(err).toBe(null)
         expect(data.Fault).toBe(undefined)
         expect(data.CDCResponse[0].QueryResponse[0].Attachable[0].Tag).toBe('Testing')
